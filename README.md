@@ -344,3 +344,473 @@ public class FlightTicket {
 ```
 ---
 ## Padrões Estruturais
+
+### Flyweight
+Permite que objetos sejam compartilhados, reduzindo a quantidade de
+memória e melhorando a performance.
+Atua como uma especie de cache para reduzir a quantidade de objetos em memória.
+
+```java
+public class Font {
+    private final String name;
+    private final int size;
+    private final boolean bold;
+    private final boolean italic;
+
+    public Font(final String name, final int size, final boolean bold, final boolean italic) {
+        this.name = name;
+        this.size = size;
+        this.bold = bold;
+        this.italic = italic;
+    }
+
+    // aplicando o padrão flyweight criando uma especie de cache para compartilhar objetos
+    // e reduzir a quantidade de memória utilizada
+    public static class FontFactory {
+        private static final Map<String, Font> FONTS = new HashMap<>();
+
+        public static Font create(final String name, final int size, final boolean bold, final boolean italic) {
+            final var key = name + size + bold + italic;
+            return FONTS.computeIfAbsent(key, k -> new Font(name, size, bold, italic));
+        }
+    }
+}
+```
+---
+### Adapter
+Atua como um intermediário entre dois objetos incompativeis que não conseguem se comunicar diretamente,
+criando uma compatibilidade entre esses objetos.
+
+```java
+public interface PaymentGateway {
+    String pay(Payment payment);
+}
+
+public enum PaymentType {
+    PIX, CREDIT
+}
+
+public class PixPaymentGateway implements PaymentGateway {
+    @Override
+    public String pay(final Payment payment) {
+        System.out.println("Realizando pagamento via Pix");
+    }
+}
+
+public class CreditCardPaymentGateway implements PaymentGateway {
+    @Override
+    public String pay(final Payment payment) {
+        System.out.println("Realizando pagamento via Cartão de Crédito");
+    }
+}
+
+public class PaymentGatewayFactory {
+    public static PaymentGateway create(final PaymentType type) {
+        return switch (type) {
+            case PIX -> new PixPaymentGateway();
+            case CREDIT -> new CreditCardPaymentGateway();
+            default -> throw new IllegalArgumentException("Tipo de pagamento não suportado");
+        };
+    }
+}
+
+public class PaymentService {
+    public void pay(final Payment payment) {
+        final var gateway = PaymentGatewayFactory.create(payment.getType());
+        gateway.pay(payment);
+    }
+}
+```
+---
+### Bridge
+Desacoplar uma abstração de sua implementação, permitindo que ambas possam variar independentemente.
+Faz uma separação conceitual para ter variações independentes.
+
+```java
+public interface Password {
+    String value();
+    boolean validate(String password);
+}
+
+public record PlainTextPassword(String value) implements Password {
+    public static PlainTextPassword create(final String value) {
+        return new PlainTextPassword(value);
+    }
+
+    @Override
+    public boolean validate(final String password) {
+        return value().equalsIgnoreCase(password);
+    }
+}
+
+public record SHA1Password(String value) implements Password {
+    public static SHA1Password create(final String value) {
+        return new SHA1Password(hash(value));
+    }
+
+    @Override
+    public boolean validate(final String password) {
+        return value().equalsIgnoreCase(hash(password));
+    }
+
+    private static String hash(final String value) {
+        return Hashing.sha1().hashString(value, UTF_8).toString();
+    }
+}
+
+public enum PasswordType {
+    PLAIN(PlainTextPassword::create),
+    SHA1(SHA1Password::create);
+
+    private final Function<String, Password> createFn;
+
+    PasswordType(final Function<String, Password> createFn) {
+        this.createFn = Objects.requireNonNull(createFn);
+    }
+
+    public Password create(final String value) {
+        return createFn.apply(value);
+    }
+}
+
+public abstract class Account {
+    private String name;
+    private String email;
+    private String document;
+    private Password password;
+
+    protected Account(String name, String email, String document, PasswordType passwordType, String password) {
+        this.name = name;
+        this.email = email;
+        this.document = document;
+        this.password = passwordType.create(password);
+    }
+
+    public boolean isValidPassword(final String password) {
+        return this.password.validate(password);
+    }
+}
+
+public class Driver extends Account {
+    private String carPlate;
+
+    public Driver(String name, String email, String document, String carPlate, String password) {
+        super(name, email, document, PasswordType.SHA1, password);
+        if (!carPlate.matches("[A-Z]{3}[0-9]{4}")) throw new RuntimeException("Invalid car plate");
+        this.carPlate = carPlate;
+    }
+}
+
+public class Passenger extends Account {
+    private String cardHolder;
+    private String cardNumber;
+    private String expirationDate;
+    private String cvv;
+
+    protected Passenger(
+            String name,
+            String email,
+            String document,
+            String cardHolder,
+            String cardNumber,
+            String expirationDate,
+            String cvv,
+            String password
+    ) {
+        super(name, email, document, PasswordType.SHA1, password);
+        this.cardHolder = cardHolder;
+        this.cardNumber = cardNumber;
+        this.expirationDate = expirationDate;
+        this.cvv = cvv;
+    }
+}
+
+```
+---
+### Decorator
+Permite adicionar novos comportamentos a objetos existentes de forma dinamica sem alterar sua estrutura.
+
+```java
+public interface Notification {
+    void send(String message);
+}
+
+// adicionando comportamento dinamicamente em cima da interface Notification
+// utilizando o padrão decorator
+public class EmailNotification implements Notification {
+    private final Notification notification;
+    
+    public EmailNotification(final Notification notification) {
+        this.notification = notification;
+    }
+    
+    @Override
+    public void send(final String message) {
+        System.out.println("Enviando email: " + message);
+        this.notification.send(message);
+    }
+}
+
+public class SMSNotification implements Notification {
+    private final Notification notification;
+    
+    public SMSNotification(final Notification notification) {
+        this.notification = notification;
+    }
+    
+    @Override
+    public void send(final String message) {
+        System.out.println("Enviando SMS: " + message);
+        this.notification.send(message);
+    }
+}
+
+public class Main {
+    public static void main(String[] args) {
+        final var emailNotification = new EmailNotification();
+        final Notification notification = new SMSNotification(emailNotification);
+        notification.send("Olá, mundo!");
+    }
+}
+
+```
+---
+## Padrões Comportamentais
+
+### Strategy
+Define uma família de algoritmos, que encapsula em cada um deles as regras que
+podem ser intercambiáveis variando de maneira independente com base nas necessidades
+de quem utiliza.
+Isola em objeto diferentes, regras diferente, permitindo flexibilidade no código.
+
+```java
+public interface FareCalculator {
+    double calculate(LocalDateTime checkInDate, LocalDateTime checkOutDate);
+}
+
+public class AirportFareCalculator implements FareCalculator {
+    @Override
+    public double calculate(final LocalDateTime checkInDate, final LocalDateTime checkOutDate) {
+        final var diff = Duration.between(checkInDate, checkOutDate).toHours();
+        return diff * 10.0;
+    }
+}
+
+public class BeachFareCalculator implements FareCalculator {
+    @Override
+    public double calculate(final LocalDateTime checkInDate, final LocalDateTime checkOutDate) {
+        return 10.0;
+    }
+}
+
+public class ShoppingFareCalculator implements FareCalculator {
+    @Override
+    public double calculate(LocalDateTime checkInDate, LocalDateTime checkOutDate) {
+        final var diff = Duration.between(checkInDate, checkOutDate).toHours();
+        var fare = 10.0;
+        final var remainingHours = diff - 3;
+        if (remainingHours > 0) {
+            fare += remainingHours * 10.0;
+        }
+        return fare;
+    }
+}
+
+public class PublicFareCalculator implements FareCalculator {
+    @Override
+    public double calculate(final LocalDateTime checkInDate, final LocalDateTime checkOutDate) {
+        return 0;
+    }
+}
+
+public enum Location {
+    AIRPORT(new AirportFareCalculator()),
+    BEACH(new BeachFareCalculator()),
+    SHOPPING(new ShoppingFareCalculator()),
+    PUBLIC(new PublicFareCalculator());
+
+    private final FareCalculator fareCalculator;
+
+    Location(final FareCalculator fareCalculator) {
+        this.fareCalculator = fareCalculator;
+    }
+
+    public double calculate(final LocalDateTime checkInDate, final LocalDateTime checkOutDate) {
+        return fareCalculator.calculate(checkInDate, checkOutDate);
+    }
+}
+
+public class ParkingTicket {
+    private final String plate;
+    private final LocalDateTime checkInDate;
+    private LocalDateTime checkOutDate;
+    private final Location location;
+    private double fare;
+
+    public void checkout(final LocalDateTime checkOutDate) {
+        this.checkOutDate = checkOutDate;
+        // quando novas tarifas forem necessárias, basta criar uma nova classe que implementa FareCalculator
+        // e adicionar uma nova localização no enum Location
+        // sem a necessidade de alterar esse método e sem violar o princípio Open/Closed
+        this.fare = this.location.calculate(this.checkInDate, this.checkOutDate);
+    }
+
+    public double getFare() {
+        return fare;
+    }
+}
+```
+---
+### State
+
+Permite que um objeto altere seu comportamento quando seu estado interno muda.
+Cria uma maquina de estado e suas transições. É um objeto que representa estado, alterando 
+seu comportamento conforme o seu estado interno muda.
+
+```java
+// Definição do contrato para os estados de um ticket
+public interface TicketStatus {
+    void assign();
+    void start();
+    void close();
+
+    enum Status {
+        REQUESTED,
+        ASSIGNED,
+        IN_PROGRESS,
+        CLOSED
+    }
+}
+
+// Implementação dos estados de um ticket
+public record RequestedStatus(Ticket ticket, TicketStatus.Status status) implements TicketStatus {
+
+    public RequestedStatus(final Ticket ticket) {
+        this(ticket, TicketStatus.Status.REQUESTED);
+    }
+
+    @Override
+    public void assign() {
+        this.ticket.changeStatus(new AssignedStatus(this.ticket));
+    }
+
+    @Override
+    public void start() {
+        throw new RuntimeException("Could not start ticket");
+    }
+
+    @Override
+    public void close() {
+        throw new RuntimeException("Could not close ticket");
+    }
+}
+
+
+public record AssignedStatus(Ticket ticket, Status status) implements TicketStatus {
+
+    public AssignedStatus(final Ticket ticket) {
+        this(ticket, Status.ASSIGNED);
+    }
+
+    @Override
+    public void assign() {
+        throw new RuntimeException("Could not assign ticket");
+    }
+
+    @Override
+    public void start() {
+        this.ticket.changeStatus(new InProgressStatus(this.ticket));
+    }
+
+    @Override
+    public void close() {
+        throw new RuntimeException("Could not close ticket");
+    }
+}
+
+public record ClosedStatus(Ticket ticket, Status status) implements TicketStatus {
+
+    public ClosedStatus(final Ticket ticket) {
+        this(ticket, Status.CLOSED);
+    }
+
+    @Override
+    public void assign() {
+        throw new RuntimeException("Could not assign ticket");
+    }
+
+    @Override
+    public void start() {
+        throw new RuntimeException("Could not start ticket");
+    }
+
+    @Override
+    public void close() {
+        throw new RuntimeException("Could not closed ticket");
+    }
+}
+
+public record InProgressStatus(Ticket ticket, Status status) implements TicketStatus {
+
+    public InProgressStatus(final Ticket ticket) {
+        this(ticket, Status.IN_PROGRESS);
+    }
+
+    @Override
+    public void assign() {
+        throw new RuntimeException("Could not assign ticket");
+    }
+
+    @Override
+    public void start() {
+        throw new RuntimeException("Could not start ticket");
+    }
+
+    @Override
+    public void close() {
+        this.ticket.changeStatus(new ClosedStatus(this.ticket));
+    }
+}
+
+public class Ticket {
+    private TicketStatus status;
+    private String employeeId;
+    private String customerId;
+    private LocalDateTime requestedAt;
+    private LocalDateTime assignedAt;
+    private LocalDateTime startedAt;
+    private LocalDateTime closedAt;
+
+    private Ticket(String customerId, LocalDateTime requestedAt) {
+        this.status = new RequestedStatus(this);
+        this.customerId = customerId;
+        this.requestedAt = requestedAt;
+    }
+    
+    public void changeStatus(final TicketStatus status) {
+        this.status = status;
+    }
+
+    public void assign(String employeeId, LocalDateTime assignedAt) {
+        this.employeeId = employeeId;
+        this.assignedAt = assignedAt;
+        // mudando o estado do ticket para ASSIGNED
+        this.status.assign();
+    }
+
+    public void start(LocalDateTime startedAt) {
+        this.startedAt = startedAt;
+        this.status.start();
+    }
+
+    public void close(LocalDateTime closedAt) {
+        this.closedAt = closedAt;
+        this.status.close();
+    }
+
+    public TicketStatus getStatus() {
+        return status;
+    }
+}
+
+```
