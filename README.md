@@ -814,3 +814,194 @@ public class Ticket {
 }
 
 ```
+---
+### Command
+
+Encapsula uma solicitação como um objeto, permitindo parametrizar clientes com diferentes solicitações,
+enfileirando e registrando essas solicitações, suportando operações de desfazer.
+
+```java
+public interface Command {
+    void execute();
+}
+
+public class TransferCommand implements Command {
+    private final BankAccount from;
+    private final BankAccount to;
+    private final double amount;
+
+    public TransferCommand(BankAccount from, BankAccount bankAccount, double amount) {
+        this.from = from;
+        to = bankAccount;
+        this.amount = amount;
+    }
+
+
+    @Override
+    public void execute() {
+        this.from.debit(this.amount);
+        this.to.credit(this.amount);
+    }
+}
+
+public class MakeTransfer {
+    private final BankAccountRepository repository;
+
+    public MakeTransfer(BankAccountRepository repository) {
+        this.repository = repository;
+    }
+
+    public void execute(final Input input) {
+        final var from = repository.findById(input.fromId);
+        final var to = repository.findById(input.toId);
+        final var transfer = new TransferCommand(from, to, input.amount);
+        transfer.execute();
+        repository.update(from);
+        repository.update(to);
+    }
+
+    public record Input(String fromId, String toId, double amount) {}
+}
+```
+---
+### Chain of Responsibility
+
+Cria uma cadeia de objetos, que recebem uma solicitação e passam para o próximo objeto da cadeia,
+até que a solicitação seja atendida ou a cadeia termine.
+
+```java
+public interface FareCalculator {
+    double calculate(Segment segment);
+}
+
+// aplicando o padrão para criar uma cadeia de calculo
+public abstract class AbstractFareCalculator implements FareCalculator {
+    // indica a execução de um proxima calculo
+    protected FareCalculator next;
+
+    public AbstractFareCalculator(final FareCalculator next) {
+        this.next = next;
+    }
+
+    public boolean hasNext() {
+        return Objects.nonNull(next);
+    }
+}
+
+// cada implementação vai criando um nó na cadeia de execução do chain of responsibility
+// e delegando para o próximo nó caso não consiga calcular o valor
+public class NormalFareCalculator extends AbstractFareCalculator {
+    private static final double FARE = 2.1;
+
+    public NormalFareCalculator(final FareCalculator next) {
+        super(next);
+    }
+
+    @Override
+    public double calculate(final Segment segment) {
+        if (!segment.isOvernight() && !segment.isSunday()) {
+            return segment.getDistance() * FARE;
+        }
+        if (!hasNext())
+            throw new RuntimeException();
+        return this.next.calculate(segment);
+    }
+}
+
+public class OvernightFareCalculator extends AbstractFareCalculator {
+    private static final double FARE = 3.9;
+
+    public OvernightFareCalculator(final FareCalculator next) {
+        super(next);
+    }
+
+    @Override
+    public double calculate(final Segment segment) {
+        if (segment.isOvernight() && !segment.isSunday()) {
+            return segment.getDistance() * FARE;
+        }
+        if (!hasNext())
+            throw new RuntimeException();
+        return this.next.calculate(segment);
+    }
+}
+
+public class OvernightSundayFareCalculator extends AbstractFareCalculator {
+    private static final double FARE = 5;
+
+    public OvernightSundayFareCalculator(final FareCalculator next) {
+        super(next);
+    }
+
+    @Override
+    public double calculate(final Segment segment) {
+        if (segment.isOvernight() && segment.isSunday()) {
+            return segment.getDistance() * FARE;
+        }
+        if (!hasNext())
+            throw new RuntimeException();
+        return this.next.calculate(segment);
+    }
+}
+
+public class SundayFareCalculator extends AbstractFareCalculator {
+    private static final double FARE = 2.9;
+
+    public SundayFareCalculator(final FareCalculator next) {
+        super(next);
+    }
+
+    @Override
+    public double calculate(final Segment segment) {
+        if (!segment.isOvernight() && segment.isSunday()) {
+            return segment.getDistance() * FARE;
+        }
+        if (!hasNext())
+            throw new RuntimeException();
+        return this.next.calculate(segment);
+    }
+}
+
+public class Ride {
+    private List<Segment> segments;
+    private double fare;
+    private FareCalculator fareCalculator;
+
+    public Ride(final FareCalculator fareCalculator) {
+        this.segments = new ArrayList<>();
+        this.fareCalculator = fareCalculator;
+    }
+
+    public void addSegment(final double distance, final LocalDateTime date) {
+        this.segments.add(new Segment(distance, date));
+    }
+
+    public void calculateFare() {
+        this.fare = 0;
+        for (Segment segment : segments) {
+            // executando a cadeia de objetos para realizar o calculo
+            // aqui se aplica o principio do OCP, pois podemos adicionar novas regras de calculo
+            // sem precisar mexer nesse método
+            this.fare += fareCalculator.calculate(segment);
+        }
+        this.fare = this.fare < 10 ? 10 : this.fare;
+    }
+}
+
+public class Main {
+    public static void main(String[] args) {
+        final var overnightSundayFareCalculator = new OvernightSundayFareCalculator(null); // 4
+        final var sundayFareCalculator = new SundayFareCalculator(overnightSundayFareCalculator); // 3
+        final var overnightFareCalculator = new OvernightFareCalculator(sundayFareCalculator); // 2
+        final var normalFareCalculator = new NormalFareCalculator(overnightFareCalculator); // 1
+        ride = new Ride(normalFareCalculator);
+        
+        ride.addSegment(10, LocalDateTime.parse("2021-03-01T10:00:00"));
+        ride.addSegment(10, LocalDateTime.parse("2021-03-01T23:00:00"));
+        ride.addSegment(10, LocalDateTime.parse("2021-03-07T10:00:00"));
+        ride.addSegment(10, LocalDateTime.parse("2021-03-07T23:00:00"));
+
+        ride.calculateFare();
+    }
+}
+```
