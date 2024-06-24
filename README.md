@@ -1016,22 +1016,25 @@ O mediador é responsável por controlar a comunicação entre os objetos.
 // Aplicando o mediator para fazer a comunicação entre objetos
 // de forma desacomplada
 public class Mediator {
-    private final List<Map<String, Handler>> handlers;
+    private final Map<String, List<Handler>> handlers;
 
     public Mediator() {
-        this.handlers = new ArrayList<>();
+        this.handlers = new HashMap<>();
     }
 
-    public void register(String event, Handler handler) {
-        this.handlers.add(Map.of(event, handler));
+    public void register(String eventName, Handler handler) {
+        this.handlers.computeIfAbsent(eventName, k -> new ArrayList<>()).add(handler);
     }
 
-    public void notify(String eventName, Event data) {
-        this.handlers.forEach(handler -> {
-            if (handler.containsKey(eventName)) {
-                handler.get(eventName).handle(data);
-            }
-        });
+    public void register(String eventName, Handler ...handler) {
+        this.handlers.computeIfAbsent(eventName, k -> new ArrayList<>()).addAll(List.of(handler));
+    }
+
+    public void notify(String eventName, Event event) {
+        if (this.handlers.containsKey(eventName)) {
+            final var handlers = this.handlers.get(eventName);
+            handlers.forEach(handler -> handler.handle(event));
+        }
     }
 }
 
@@ -1081,12 +1084,19 @@ public class Main {
         final var saveGradeMediator = new SaveGradeMediator(gradeRepository, mediator);
 
         // registrando os handlers que serão acionados quando o evento gradeSaved for disparado
-        mediator.register("gradeSaved", event -> {
-            System.out.println("Calculating average");
-            calculateAverage.execute(((GradeSaved) event).studentId());
-        });
-        
-        mediator.register("gradeSaved", event -> System.out.println("Grade saved"));
+        mediator.register(
+            "gradeSaved",
+            event -> {
+                System.out.println("Calculating average");
+                calculateAverage.execute(((GradeSaved) event).studentId());
+            },
+            event -> System.out.println("Grade saved")
+        );
+
+        mediator.register(
+            "otherEvent",
+            event -> System.out.println("Outro evento " + event)
+        );
 
         saveGradeMediator.execute(new SaveGradeMediator.Input("1", "exam1", 10.0));
     }
