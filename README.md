@@ -1005,3 +1005,90 @@ public class Main {
     }
 }
 ```
+---
+### Mediator
+
+Define um objeto (de mediação) que encapsula como um conjunto de objetos interage, promovendo o desacoplamento
+entre os objetos, não tendo um acomplamento explicito.
+O mediador é responsável por controlar a comunicação entre os objetos.
+
+```java
+// Aplicando o mediator para fazer a comunicação entre objetos
+// de forma desacomplada
+public class Mediator {
+    private final List<Map<String, Handler>> handlers;
+
+    public Mediator() {
+        this.handlers = new ArrayList<>();
+    }
+
+    public void register(String event, Handler handler) {
+        this.handlers.add(Map.of(event, handler));
+    }
+
+    public void notify(String eventName, Event data) {
+        this.handlers.forEach(handler -> {
+            if (handler.containsKey(eventName)) {
+                handler.get(eventName).handle(data);
+            }
+        });
+    }
+}
+
+public class CalculateAverage {
+    private final AverageRepository averageRepository;
+    private final GradeRepository gradeRepository;
+
+    public CalculateAverage(AverageRepository averageRepository, GradeRepository gradeRepository) {
+        this.averageRepository = averageRepository;
+        this.gradeRepository = gradeRepository;
+    }
+
+    public void execute(String studentId) {
+        final var grades = this.gradeRepository.listByStudentId(studentId);
+        double total = 0;
+        for (Grade grade : grades) {
+            total += grade.value();
+        }
+        final var value = total / grades.size();
+        this.averageRepository.save(new Average(studentId, value));
+    }
+}
+
+public class SaveGradeMediator {
+    private final GradeRepository gradeRepository;
+    private final Mediator mediator;
+
+    public SaveGradeMediator(GradeRepository gradeRepository, Mediator mediator) {
+        this.gradeRepository = gradeRepository;
+        this.mediator = mediator;
+    }
+
+    public void execute(final Input in) {
+        final var grade = new Grade(in.studentId(), in.exam(), in.value());
+        this.gradeRepository.save(grade);
+        // notificando os handlers que o evento gradeSaved foi disparado
+        this.mediator.notify("gradeSaved", new GradeSaved(in.studentId()));
+    }
+
+    public record Input(String studentId, String exam, double value) {}
+}
+
+public class Main {
+    public static void main(String[] args) {
+        final var mediator = new Mediator();
+        final var gradeRepository = new GradeRepository();
+        final var saveGradeMediator = new SaveGradeMediator(gradeRepository, mediator);
+
+        // registrando os handlers que serão acionados quando o evento gradeSaved for disparado
+        mediator.register("gradeSaved", event -> {
+            System.out.println("Calculating average");
+            calculateAverage.execute(((GradeSaved) event).studentId());
+        });
+        
+        mediator.register("gradeSaved", event -> System.out.println("Grade saved"));
+
+        saveGradeMediator.execute(new SaveGradeMediator.Input("1", "exam1", 10.0));
+    }
+}
+```
