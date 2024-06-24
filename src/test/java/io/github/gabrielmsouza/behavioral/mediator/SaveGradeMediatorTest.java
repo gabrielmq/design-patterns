@@ -20,11 +20,7 @@ class SaveGradeMediatorTest {
             event -> {
                 System.out.println("Calculating average");
                 calculateAverage.execute(((GradeSaved) event).studentId());
-            }
-        );
-
-        mediator.register(
-            "gradeSaved",
+            },
             event -> System.out.println("Grade saved " + event)
         );
 

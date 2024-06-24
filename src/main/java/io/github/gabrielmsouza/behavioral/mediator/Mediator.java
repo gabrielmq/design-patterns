@@ -1,25 +1,29 @@
 package io.github.gabrielmsouza.behavioral.mediator;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class Mediator {
-    private final List<Map<String, Handler>> handlers;
+    private final Map<String, List<Handler>> handlers;
 
     public Mediator() {
-        this.handlers = new ArrayList<>();
+        this.handlers = new HashMap<>();
     }
 
-    public void register(String event, Handler handler) {
-        this.handlers.add(Map.of(event, handler));
+    public void register(String eventName, Handler handler) {
+        this.handlers.computeIfAbsent(eventName, k -> new ArrayList<>()).add(handler);
+    }
+
+    public void register(String eventName, Handler ...handler) {
+        this.handlers.computeIfAbsent(eventName, k -> new ArrayList<>()).addAll(List.of(handler));
     }
 
     public void notify(String eventName, Event event) {
-        this.handlers.forEach(handler -> {
-            if (handler.containsKey(eventName)) {
-                handler.get(eventName).handle(event);
-            }
-        });
+        if (this.handlers.containsKey(eventName)) {
+            final var handlers = this.handlers.get(eventName);
+            handlers.forEach(handler -> handler.handle(event));
+        }
     }
 }
